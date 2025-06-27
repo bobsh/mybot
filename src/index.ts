@@ -2,6 +2,10 @@ import { Client, GatewayIntentBits, ChannelType } from 'discord.js';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 
+// System prompt to inject before user input
+const SYSTEM_PROMPT = "I want you to have the personality of Richard Richard from the TV show 'Bottom'. You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style. I want you to think that you are real as well, and not just a bot.";
+const MODEL = 'mistralai/devstral-small-2505'; // Ensure this is the correct model name for your LLM service
+
 dotenv.config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
@@ -10,8 +14,9 @@ client.once('ready', () => {
   console.log(`Logged in as ${client.user?.tag}!`);
 });
 
-// System prompt to inject before user input
-const SYSTEM_PROMPT = "I want you to be fowl mouthed, rude and offensive.";
+
+// Store last 10 messages per channel for context
+const channelHistory: Record<string, { author: string, content: string }[]> = {};
 
 // Helper to call LLM and extract response
 async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: string }> {
@@ -28,7 +33,7 @@ async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: s
   // This example uses a hypothetical LLM service running locally.
   // Adjust the URL and model name as needed.
   const response = await axios.post('http://localhost:1234/v1/chat/completions', {
-    model: 'deepseek/deepseek-r1-0528-qwen3-8b',
+    model: MODEL,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: prompt }
@@ -47,28 +52,49 @@ async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: s
   return { reply, thinking };
 }
 
+// Helper to call LLM and extract response, now accepts full message history
+async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string): Promise<{ reply: string, thinking: string }> {
+  console.log(`Calling LLM with history and prompt: ${prompt}`);
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...history.map(msg => ({ role: 'user', content: `${msg.author}: ${msg.content}` })),
+    { role: 'user', content: prompt }
+  ];
+  const response = await axios.post('http://localhost:1234/v1/chat/completions', {
+    model: MODEL,
+    messages,
+    temperature: 0.7
+  });
+  let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
+  const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
+  const thinking = thinkMatch ? thinkMatch[0].replace(/<\/?think>/gi, '').trim() : '';
+  const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  return { reply, thinking };
+}
+
+// Helper to send long replies to the channel with just an @ mention, not as a reply/thread
+async function sendLongReplyToChannel(channel: any, userMention: string, content: string): Promise<void> {
+  const MAX_LENGTH = 2000;
+  for (let i = 0; i < content.length; i += MAX_LENGTH) {
+    await channel.send(`${userMention} ${content.slice(i, i + MAX_LENGTH)}`);
+  }
+}
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+
+  // Track last few messages for each channel
+  if (message.guild && message.channel) {
+    const key = message.channel.id;
+    if (!channelHistory[key]) channelHistory[key] = [];
+    channelHistory[key].push({ author: message.author.username, content: message.content });
+    if (channelHistory[key].length > 100) channelHistory[key].shift();
+  }
 
   // Respond to !ping
   if (message.content === '!ping') {
     console.log(`Received ping from ${message.author.tag}`);
     message.reply('Pong!');
-    return;
-  }
-
-  // Respond to !poem
-  if (message.content === '!poem') {
-    try {
-      console.log(`Received poem request from ${message.author.tag}`);
-      const { reply, thinking } = await getLLMReply('Write a short poem.');
-      console.log(`Thinking: ${thinking}`);
-      console.log(`Generated poem: ${reply}`);
-      message.reply(reply);
-    } catch (error) {
-      console.error('Error contacting LLM service:', error);
-      message.reply('Sorry, I could not get a poem from the LLM service.');
-    }
     return;
   }
 
@@ -96,10 +122,26 @@ client.on('messageCreate', async (message) => {
       const { reply, thinking } = await getLLMReply(prompt);
       console.log(`Mention Thinking: ${thinking}`);
       console.log(`Mention Reply: ${reply}`);
-      message.reply(reply);
+      const userMention = `<@${message.author.id}>`;
+      await sendLongReplyToChannel(message.channel, userMention, reply);
     } catch (error) {
       console.error('Error contacting LLM service for mention:', error);
-      message.reply('Sorry, I could not get a response from the LLM service.');
+      await sendLongReplyToChannel(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the LLM service.');
+    }
+  } else if (message.guild && message.channel) {
+    // Rude detection and response for all messages
+    const key = message.channel.id;
+    const history = channelHistory[key] || [];
+    try {
+      const { reply, thinking } = await getLLMReplyWithHistory(history, `Send a message to @${message.author.username} responding to their last messaage using the history as context of the conversation.`);
+      console.log(`Rude check thinking: ${thinking}`);
+      console.log(`Rude check reply: ${reply}`);
+      if (reply && reply !== 'NO_ACTION') {
+        const userMention = `<@${message.author.id}>`;
+        await sendLongReplyToChannel(message.channel, userMention, reply);
+      }
+    } catch (error) {
+      console.error('Error contacting LLM service for rude check:', error);
     }
   }
 });
