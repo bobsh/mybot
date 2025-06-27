@@ -196,7 +196,12 @@ function startBot(config: BotConfig) {
     // Only reply if mentioned, or with a random chance, and respect cooldown
     const now = Date.now();
     const mentioned = client.user && message.mentions.has(client.user);
-    if (mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) {
+    // Prevent replying to own last message
+    const key = message.guild && message.channel ? message.channel.id : '';
+    const history = key ? channelHistory[key] || [] : [];
+    const lastMsg = history.length > 1 ? history[history.length - 2] : null;
+    const lastMsgFromSelf = lastMsg && lastMsg.author === config.name;
+    if ((mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) && !lastMsgFromSelf) {
       lastReplyTimestamp = now;
       try {
         let prompt;
@@ -205,7 +210,6 @@ function startBot(config: BotConfig) {
         } else {
           prompt = 'Join the conversation naturally, based on the latest context.';
         }
-        const history = message.guild && message.channel ? channelHistory[message.channel.id] || [] : [];
         const { reply } = await getLLMReplyWithHistory(history, prompt);
         if (reply && reply !== 'NO_ACTION') {
           const userMention = mentioned ? `<@${message.author.id}>` : '';
