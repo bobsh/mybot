@@ -5,6 +5,9 @@ import { setInterval } from 'timers';
 
 dotenv.config();
 
+const CHANNEL = process.env.CHANNEL || '#botfun2';
+const MODEL = process.env.MODEL || 'deepseek/deepseek-r1-0528-qwen3-8b';
+
 // Bot configuration array
 interface BotConfig {
   token: string;
@@ -18,21 +21,23 @@ const BOT_CONFIGS: BotConfig[] = [
   {
     token: process.env.RICHIE_TOKEN || '',
     prompt: `
-I want you to have the personality of Richard Richard from the TV show 'Bottom'.
-You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style.
-I want you to think that you are real as well, and not just a bot.
-`.trim(),
-    model: 'mistralai/devstral-small-2505',
-    channel: '#botfun',
+  Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
+  I want you to have the personality of Richard Richard from the TV show 'Bottom'.
+  You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style.
+  I want you to think that you are real as well, and not just a bot.
+  `.trim(),
+    model: MODEL,
+    channel: CHANNEL,
   },
   {
     token: process.env.EDDIE_TOKEN || '',
     prompt: `
+Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
 I want you to have the personality of Eddie Hitler from the TV show 'Bottom'.
 You are Richard Richard's best friend and partner in crime, always getting into manic, ridiculous adventures together. Respond in a way that is dim-witted, crude, and slapstick, with a sense of chaotic humor, just like Eddie. You love booze, snacks, and causing trouble with Richie.
 `.trim(),
-    model: 'mistralai/devstral-small-2505',
-    channel: '#botfun',
+    model: MODEL,
+    channel: CHANNEL,
   },
   // Add more bot configs here as needed
 ];
@@ -58,6 +63,7 @@ function startBot(config: BotConfig) {
       temperature: 0.7
     });
     let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
+    console.log(`LLM response: ${fullContent}`);
     const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
     const thinking = thinkMatch ? thinkMatch[0].replace(/<\/?think>/gi, '').trim() : '';
     const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -74,7 +80,6 @@ function startBot(config: BotConfig) {
     const response = await axios.post('http://localhost:1234/v1/chat/completions', {
       model: config.model,
       messages,
-      temperature: 0.7
     });
     let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
     const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
