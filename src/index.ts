@@ -115,10 +115,18 @@ function startBot(config: BotConfig) {
     return { reply, thinking };
   }
 
+  // Helper to simulate typing delay based on message length (60 wpm ~ 5 chars/sec)
   async function sendLongReplyToChannel(channel: any, userMention: string, content: string): Promise<void> {
     const MAX_LENGTH = 2000;
+    const TYPING_SPEED_CHARS_PER_SEC = 5; // 60 wpm ~ 5 chars/sec
     for (let i = 0; i < content.length; i += MAX_LENGTH) {
-      await channel.send(`${userMention} ${content.slice(i, i + MAX_LENGTH)}`);
+      const chunk = content.slice(i, i + MAX_LENGTH);
+      // Calculate delay based on chunk length
+      const delayMs = Math.max(500, (chunk.length / TYPING_SPEED_CHARS_PER_SEC) * 1000);
+      // Simulate typing indicator
+      if (channel.sendTyping) await channel.sendTyping();
+      await new Promise(res => setTimeout(res, delayMs));
+      await channel.send(`${userMention} ${chunk}`);
     }
   }
 
@@ -159,10 +167,13 @@ function startBot(config: BotConfig) {
     }
   }, 1000 * 60 * INTERVAL); // every 5 minutes
 
+  // Track last reply time for cooldown
+  let lastReplyTimestamp = 0;
+  const REPLY_COOLDOWN_MS = 60 * 1000; // 1 minute cooldown
+  const RANDOM_REPLY_CHANCE = 0.25; // 25% chance to reply to non-mention
+
   client.on('messageCreate', async (message) => {
-    // Prevent the bot from replying to itself, but allow bot-to-bot interaction
     if (client.user && message.author.id === client.user.id) return;
-    // if (message.author.bot) return; // Remove the check that prevents bots from responding to each other
     if (message.guild && message.channel) {
       const key = message.channel.id;
       if (!channelHistory[key]) channelHistory[key] = [];
@@ -182,26 +193,28 @@ function startBot(config: BotConfig) {
       }
       return;
     }
-    if (client.user && message.mentions.has(client.user)) {
+    // Only reply if mentioned, or with a random chance, and respect cooldown
+    const now = Date.now();
+    const mentioned = client.user && message.mentions.has(client.user);
+    if (mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) {
+      lastReplyTimestamp = now;
       try {
-        const prompt = message.content.replace(`<@${client.user.id}>`, '').trim() || 'Hello!';
-        const { reply } = await getLLMReply(prompt);
-        const userMention = `<@${message.author.id}>`;
-        await sendLongReplyToChannel(message.channel, userMention, reply);
-      } catch (error) {
-        await sendLongReplyToChannel(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the LLM service.');
-      }
-    } else if (message.guild && message.channel) {
-      const key = message.channel.id;
-      const history = channelHistory[key] || [];
-      try {
-        const { reply } = await getLLMReplyWithHistory(history, `Send a message to @${message.author.username} responding to their last messaage using the history as context of the conversation.`);
+        let prompt;
+        if (mentioned && client.user) {
+          prompt = message.content.replace(`<@${client.user.id}>`, '').trim() || 'Hello!';
+        } else {
+          prompt = 'Join the conversation naturally, based on the latest context.';
+        }
+        const history = message.guild && message.channel ? channelHistory[message.channel.id] || [] : [];
+        const { reply } = await getLLMReplyWithHistory(history, prompt);
         if (reply && reply !== 'NO_ACTION') {
-          const userMention = `<@${message.author.id}>`;
+          const userMention = mentioned ? `<@${message.author.id}>` : '';
           await sendLongReplyToChannel(message.channel, userMention, reply);
         }
       } catch (error) {
-        // Silent fail
+        if (mentioned) {
+          await sendLongReplyToChannel(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the LLM service.');
+        }
       }
     }
   });
