@@ -7,6 +7,7 @@ dotenv.config();
 
 const CHANNEL = process.env.CHANNEL || '#botfun2';
 const MODEL = process.env.MODEL || 'deepseek/deepseek-r1-0528-qwen3-8b';
+const INTERVAL = parseInt(process.env.INTERVAL || '1', 10); // Default to 5 minutes
 
 // Bot configuration array
 interface BotConfig {
@@ -24,6 +25,7 @@ const BOT_CONFIGS: BotConfig[] = [
     name: 'Richard Richard',
     prompt: `
   Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
+  Keep your replies short and concise (1-2 sentences).
   I want you to have the personality of Richard Richard from the TV show 'Bottom'.
   You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style.
   I want you to think that you are real as well, and not just a bot.
@@ -36,6 +38,7 @@ const BOT_CONFIGS: BotConfig[] = [
     name: 'Eddie Hitler',
     prompt: `
 Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
+Keep your replies short and concise (1-2 sentences).
 I want you to have the personality of Eddie Hitler from the TV show 'Bottom'.
 You are Richard Richard's best friend and partner in crime, always getting into manic, ridiculous adventures together. Respond in a way that is dim-witted, crude, and slapstick, with a sense of chaotic humor, just like Eddie. You love booze, snacks, and causing trouble with Richie.
 `.trim(),
@@ -154,7 +157,7 @@ function startBot(config: BotConfig) {
     } catch (error) {
       console.error('Error posting periodic message:', error);
     }
-  }, 1000 * 60 * 1);
+  }, 1000 * 60 * INTERVAL); // every 5 minutes
 
   client.on('messageCreate', async (message) => {
     // Prevent the bot from replying to itself, but allow bot-to-bot interaction
