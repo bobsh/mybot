@@ -50,8 +50,21 @@ function startBot(config: BotConfig) {
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
   const channelHistory: Record<string, { author: string, content: string }[]> = {};
 
-  client.once('ready', () => {
+  client.once('ready', async () => {
     console.log(`Logged in as ${client.user?.tag}!`);
+    // On ready, immediately post a message in the configured channel
+    const channel = getChannelByName(config.channel);
+    if (channel) {
+      const prompt = `Say hello to the channel and introduce yourself as ${config.name}.`;
+      try {
+        const { reply } = await getLLMReply(prompt);
+        if (reply && reply !== 'NO_ACTION') {
+          await sendLongReplyToChannel(channel, '', reply);
+        }
+      } catch (error) {
+        console.error('Error posting join message:', error);
+      }
+    }
   });
 
   // Pass all bot names to the prompt for self/other awareness
@@ -80,6 +93,7 @@ function startBot(config: BotConfig) {
   // Helper to call LLM and extract response, now accepts full message history
   async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string): Promise<{ reply: string, thinking: string }> {
     const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.`;
+    console.log(`Calling LLM with history: ${JSON.stringify(history)} and prompt: ${prompt}`);
     const messages = [
       { role: 'system', content: systemPrompt },
       ...history.map(msg => ({ role: 'user', content: `${msg.author}: ${msg.content}` })),
@@ -91,6 +105,7 @@ function startBot(config: BotConfig) {
       temperature: 0.7
     });
     let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
+    console.log(`LLM response with history: ${fullContent}`);
     const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
     const thinking = thinkMatch ? thinkMatch[0].replace(/<\/?think>/gi, '').trim() : '';
     const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -142,6 +157,8 @@ function startBot(config: BotConfig) {
   }, 1000 * 60 * 1);
 
   client.on('messageCreate', async (message) => {
+    // Prevent the bot from replying to itself, but allow bot-to-bot interaction
+    if (client.user && message.author.id === client.user.id) return;
     // if (message.author.bot) return; // Remove the check that prevents bots from responding to each other
     if (message.guild && message.channel) {
       const key = message.channel.id;
