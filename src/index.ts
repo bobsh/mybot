@@ -7,7 +7,7 @@ dotenv.config();
 
 const CHANNEL = process.env.CHANNEL || '#botfun2';
 const MODEL = process.env.MODEL || 'deepseek/deepseek-r1-0528-qwen3-8b';
-const INTERVAL = parseInt(process.env.INTERVAL || '1', 10); // Default to 5 minutes
+const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
 
 // Bot configuration array
 interface BotConfig {
@@ -153,9 +153,9 @@ function startBot(config: BotConfig) {
     if (!channel) return;
     const key = channel.id;
     const history = channelHistory[key] || [];
-    let prompt = 'Say something new, funny, or based on the recent conversation.';
+    let prompt = 'Say something new, funny hilarious.';
     if (history.length > 0) {
-      prompt = `Based on the recent conversation, say something new, funny, or relevant. If nothing is relevant, just say something in character. If you think there is nothing to say, just say "NO_ACTION".`;
+      prompt = `Based on the recent conversation, say something new, funny, or relevant. If nothing is relevant, just say something in character. Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".`;
     }
     try {
       const { reply } = await getLLMReplyWithHistory(history, prompt);
