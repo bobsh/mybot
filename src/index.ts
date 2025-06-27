@@ -14,12 +14,14 @@ interface BotConfig {
   prompt: string;
   model: string;
   channel: string;
+  name: string; // The bot's username (for self-awareness and for others)
 }
 
 // Example: load from environment variables or hardcode for now
 const BOT_CONFIGS: BotConfig[] = [
   {
     token: process.env.RICHIE_TOKEN || '',
+    name: 'Richard Richard',
     prompt: `
   Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
   I want you to have the personality of Richard Richard from the TV show 'Bottom'.
@@ -31,6 +33,7 @@ const BOT_CONFIGS: BotConfig[] = [
   },
   {
     token: process.env.EDDIE_TOKEN || '',
+    name: 'Eddie Hitler',
     prompt: `
 Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
 I want you to have the personality of Eddie Hitler from the TV show 'Bottom'.
@@ -51,13 +54,17 @@ function startBot(config: BotConfig) {
     console.log(`Logged in as ${client.user?.tag}!`);
   });
 
+  // Pass all bot names to the prompt for self/other awareness
+  const allBotNames = BOT_CONFIGS.map(b => b.name).filter(Boolean);
+
   // Helper to call LLM and extract response
   async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: string }> {
-    console.log(`Calling LLM with prompt: ${prompt}`);
+    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.`;
+    console.log(`Calling LLM with prompt: ${systemPrompt}`);
     const response = await axios.post('http://localhost:1234/v1/chat/completions', {
       model: config.model,
       messages: [
-        { role: 'system', content: config.prompt },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7
@@ -72,14 +79,16 @@ function startBot(config: BotConfig) {
 
   // Helper to call LLM and extract response, now accepts full message history
   async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string): Promise<{ reply: string, thinking: string }> {
+    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.`;
     const messages = [
-      { role: 'system', content: config.prompt },
+      { role: 'system', content: systemPrompt },
       ...history.map(msg => ({ role: 'user', content: `${msg.author}: ${msg.content}` })),
       { role: 'user', content: prompt }
     ];
     const response = await axios.post('http://localhost:1234/v1/chat/completions', {
       model: config.model,
       messages,
+      temperature: 0.7
     });
     let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
     const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
@@ -133,7 +142,7 @@ function startBot(config: BotConfig) {
   }, 1000 * 60 * 1);
 
   client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+    // if (message.author.bot) return; // Remove the check that prevents bots from responding to each other
     if (message.guild && message.channel) {
       const key = message.channel.id;
       if (!channelHistory[key]) channelHistory[key] = [];
