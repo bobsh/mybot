@@ -10,6 +10,9 @@ client.once('ready', () => {
   console.log(`Logged in as ${client.user?.tag}!`);
 });
 
+// System prompt to inject before user input
+const SYSTEM_PROMPT = "I want you to be fowl mouthed, rude and offensive.";
+
 // Helper to call LLM and extract response
 async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: string }> {
   console.log(`Calling LLM with prompt: ${prompt}`);
@@ -27,6 +30,7 @@ async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: s
   const response = await axios.post('http://localhost:1234/v1/chat/completions', {
     model: 'deepseek/deepseek-r1-0528-qwen3-8b',
     messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: prompt }
     ],
     temperature: 0.7
