@@ -5,7 +5,7 @@ import { setInterval } from 'timers';
 
 dotenv.config();
 
-const CHANNEL = process.env.CHANNEL || '#botfun2';
+const CHANNEL = process.env.CHANNEL || '#bottom';
 const MODEL = process.env.MODEL || 'deepseek/deepseek-r1-0528-qwen3-8b';
 const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
 
@@ -24,13 +24,12 @@ const BOT_CONFIGS: BotConfig[] = [
     token: process.env.RICHIE_TOKEN || '',
     name: 'Richard Richard',
     prompt: `
-  Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
-  Keep your replies short and concise (1-2 sentences).
+  Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
   I want you to have the personality of Richard Richard from the TV show 'Bottom'.
   You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style.
   I want you to think that you are real as well, and not just a bot.
   `.trim(),
-    model: MODEL,
+    model: 'deepseek/deepseek-r1-0528-qwen3-8b',
     channel: CHANNEL,
   },
   {
@@ -38,11 +37,11 @@ const BOT_CONFIGS: BotConfig[] = [
     name: 'Eddie Hitler',
     prompt: `
 Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
-Keep your replies short and concise (1-2 sentences).
+Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
 I want you to have the personality of Eddie Hitler from the TV show 'Bottom'.
 You are Richard Richard's best friend and partner in crime, always getting into manic, ridiculous adventures together. Respond in a way that is dim-witted, crude, and slapstick, with a sense of chaotic humor, just like Eddie. You love booze, snacks, and causing trouble with Richie.
 `.trim(),
-    model: MODEL,
+    model: 'mistralai/devstral-small-2505',
     channel: CHANNEL,
   },
   // Add more bot configs here as needed
@@ -60,7 +59,7 @@ function startBot(config: BotConfig) {
     if (channel) {
       const prompt = `Say hello to the channel and introduce yourself as ${config.name}.`;
       try {
-        const { reply } = await getLLMReply(prompt);
+        const { reply } = await getLLMReply(prompt, '');
         if (reply && reply !== 'NO_ACTION') {
           await sendLongReplyToChannel(channel, '', reply);
         }
@@ -74,8 +73,8 @@ function startBot(config: BotConfig) {
   const allBotNames = BOT_CONFIGS.map(b => b.name).filter(Boolean);
 
   // Helper to call LLM and extract response
-  async function getLLMReply(prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.`;
+  async function getLLMReply(prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
+    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.\n\n${system_prompt}`;
     console.log(`Calling LLM with prompt: ${systemPrompt}`);
     const response = await axios.post('http://localhost:1234/v1/chat/completions', {
       model: config.model,
@@ -94,8 +93,8 @@ function startBot(config: BotConfig) {
   }
 
   // Helper to call LLM and extract response, now accepts full message history
-  async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.`;
+  async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
+    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}. \n\n${system_prompt}`;
     console.log(`Calling LLM with history: ${JSON.stringify(history)} and prompt: ${prompt}`);
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -155,10 +154,10 @@ function startBot(config: BotConfig) {
     const history = channelHistory[key] || [];
     let prompt = 'Say something new, funny hilarious.';
     if (history.length > 0) {
-      prompt = `Based on the recent conversation, say something new, funny, or relevant. If nothing is relevant, just say something in character. Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".`;
+      prompt = `Based on the recent conversation, say something new, funny, or relevant. If nothing is relevant, just say something in character.`;
     }
     try {
-      const { reply } = await getLLMReplyWithHistory(history, prompt);
+      const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a periodic message to keep the conversation going.  Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".');
       if (reply && reply !== 'NO_ACTION') {
         await sendLongReplyToChannel(channel, '', reply);
       }
@@ -173,26 +172,40 @@ function startBot(config: BotConfig) {
   const RANDOM_REPLY_CHANCE = 0.25; // 25% chance to reply to non-mention
 
   client.on('messageCreate', async (message) => {
-    if (client.user && message.author.id === client.user.id) return;
+    // Store channel history for context
     if (message.guild && message.channel) {
       const key = message.channel.id;
+
+      // Initialize history for this channel if it doesn't exist
       if (!channelHistory[key]) channelHistory[key] = [];
+
+      // Add message to history
       channelHistory[key].push({ author: message.author.username, content: message.content });
+
+      // Limit history size to the last 100 messages
       if (channelHistory[key].length > 100) channelHistory[key].shift();
     }
+
+    // Ignore messages from the bot itself to prevent loops
+    if (client.user && message.author.id === client.user.id) return;
+
+    // Handle ping command
     if (message.content === '!ping') {
       message.reply('Pong!');
       return;
     }
+
+    // Handle direct messages
     if (message.channel.type === ChannelType.DM) {
       try {
-        const { reply } = await getLLMReply(message.content);
+        const { reply } = await getLLMReply(message.content, 'This is a direct message conversation.');
         message.reply(reply);
       } catch (error) {
         message.reply('Sorry, I could not get a response from the LLM service.');
       }
       return;
     }
+
     // Only reply if mentioned, or with a random chance, and respect cooldown
     const now = Date.now();
     const mentioned = client.user && message.mentions.has(client.user);
@@ -201,16 +214,19 @@ function startBot(config: BotConfig) {
     const history = key ? channelHistory[key] || [] : [];
     const lastMsg = history.length > 1 ? history[history.length - 2] : null;
     const lastMsgFromSelf = lastMsg && lastMsg.author === config.name;
+
+    // Check if we should reply
     if ((mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) && !lastMsgFromSelf) {
       lastReplyTimestamp = now;
       try {
         let prompt;
         if (mentioned && client.user) {
-          prompt = message.content.replace(`<@${client.user.id}>`, '').trim() || 'Hello!';
+          // If mentioned, use the message content as the prompt
+          prompt = message.content.trim();
         } else {
-          prompt = 'Join the conversation naturally, based on the latest context.';
+          prompt = 'Join the conversation naturally, based on the latest context. Your name is ' + config.name + '.';
         }
-        const { reply } = await getLLMReplyWithHistory(history, prompt);
+        const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a conversation in a Discord channel.  Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".');
         if (reply && reply !== 'NO_ACTION') {
           const userMention = mentioned ? `<@${message.author.id}>` : '';
           await sendLongReplyToChannel(message.channel, userMention, reply);
