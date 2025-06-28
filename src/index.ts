@@ -5,9 +5,15 @@ import { setInterval } from 'timers';
 
 dotenv.config();
 
-const CHANNEL = process.env.CHANNEL || '#bottom';
-const MODEL = process.env.MODEL || 'deepseek/deepseek-r1-0528-qwen3-8b';
+const CHANNEL = process.env.CHANNEL || '#talk';
+const BASE_MODEL = process.env.MODEL || 'mixtral-8x7b-instruct-v0.1-i1';
 const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
+
+const BASE_SYSTEM_PROMPT = `
+  Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
+  Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
+  I want you to think that you are real as well, and not just a bot. Only reply for yourself, not for any other bots or people.
+`.trim();
 
 // Bot configuration array
 interface BotConfig {
@@ -15,33 +21,30 @@ interface BotConfig {
   prompt: string;
   model: string;
   channel: string;
-  name: string; // The bot's username (for self-awareness and for others)
+  name: string;
 }
 
-// Example: load from environment variables or hardcode for now
+// Bot configurations
+// Each bot has its own token, prompt, model, and channel
+// You can add more bots by adding to this array
+// Make sure to set the environment variables for each bot token
 const BOT_CONFIGS: BotConfig[] = [
   {
-    token: process.env.RICHIE_TOKEN || '',
-    name: 'Richard',
+    token: process.env.POI_TOKEN || '',
+    name: 'Poi',
     prompt: `
-  Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
-  I want you to have the personality of Richard from the TV show 'Bottom'.
-  You should respond to messages in a way that is intentionally offensive, crude, and humorous, similar to the character's style.
-  I want you to think that you are real as well, and not just a bot.
+  I want you to be an intelligent and also exacting and precise helper that wants to act quickly and efficiently.
   `.trim(),
-    model: 'deepseek/deepseek-r1-0528-qwen3-8b',
+    model: BASE_MODEL,
     channel: CHANNEL,
   },
   {
-    token: process.env.EDDIE_TOKEN || '',
-    name: 'Eddie',
+    token: process.env.MOI_TOKEN || '',
+    name: 'Moi',
     prompt: `
-Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
-Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
-I want you to have the personality of Eddie from the TV show 'Bottom'.
-You are Richard Richard's best friend and partner in crime, always getting into manic, ridiculous adventures together. Respond in a way that is dim-witted, crude, and slapstick, with a sense of chaotic humor, just like Eddie. You love booze, snacks, and causing trouble with Richie.
+  I want you to be a wise and thoughtful helper that takes time to consider your responses.
 `.trim(),
-    model: 'mistralai/devstral-small-2505',
+    model: BASE_MODEL,
     channel: CHANNEL,
   },
   // Add more bot configs here as needed
@@ -74,7 +77,7 @@ function startBot(config: BotConfig) {
 
   // Helper to call LLM and extract response
   async function getLLMReply(prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}.\n\n${system_prompt}`;
+    const systemPrompt = `Your name is ${config.name}.\n${BASE_SYSTEM_PROMPT}\n\n${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}.\n\n${system_prompt}`;
     console.log(`Calling LLM with prompt: ${systemPrompt}`);
     const response = await axios.post('http://localhost:1234/v1/chat/completions', {
       model: config.model,
@@ -94,7 +97,7 @@ function startBot(config: BotConfig) {
 
   // Helper to call LLM and extract response, now accepts full message history
   async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}. You are ${config.name}. \n\n${system_prompt}`;
+    const systemPrompt = `Your name is ${config.name}.\n${BASE_SYSTEM_PROMPT}\n\n${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}.\n\n${system_prompt}`;
     console.log(`Calling LLM with history: ${JSON.stringify(history)} and prompt: ${prompt}`);
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -129,6 +132,7 @@ function startBot(config: BotConfig) {
     }
   }
 
+  // Helper to get channel by name across all guilds
   function getChannelByName(channelName: string): TextChannel | null {
     const name = channelName.startsWith('#') ? channelName.slice(1) : channelName;
     for (const guild of client.guilds.cache.values()) {
@@ -164,7 +168,7 @@ function startBot(config: BotConfig) {
     } catch (error) {
       console.error('Error posting periodic message:', error);
     }
-  }, 1000 * 60 * INTERVAL); // every 5 minutes
+  }, 1000 * 60 * INTERVAL);
 
   // Track last reply time for cooldown
   let lastReplyTimestamp = 0;
