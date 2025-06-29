@@ -253,13 +253,15 @@ mybot/
 │   └── index.ts           # Main bot logic
 ├── dist/                  # Compiled JavaScript (generated)
 ├── .github/
-│   └── workflows/
-│       └── lint.yml       # GitHub Actions CI/CD
+│   ├── workflows/
+│   │   └── lint.yml       # GitHub Actions CI/CD
+│   └── dependabot.yml     # Dependabot configuration
 ├── eslint.config.js       # ESLint configuration
 ├── tsconfig.json          # TypeScript configuration
 ├── package.json           # Node.js dependencies and scripts
 ├── Procfile               # Heroku process configuration
 ├── .env                   # Environment variables (create this)
+├── .env.example           # Environment variables template
 └── README.md              # This file
 ```
 
@@ -304,6 +306,23 @@ The project includes automated linting and type checking via GitHub Actions:
 - **Triggers**: On push and pull requests to `main` branch
 - **Checks**: ESLint, TypeScript compilation, and build verification
 - **Node.js**: Version 22.x (configurable in `.github/workflows/lint.yml`)
+
+### Dependabot Automation
+
+Dependabot is configured to automatically update dependencies:
+
+- **npm dependencies**: Weekly updates on Mondays at 9:00 AM
+- **GitHub Actions**: Weekly updates on Mondays at 9:00 AM
+- **Grouping**: Related dependencies are grouped together (TypeScript ESLint, Discord.js, dev dependencies)
+- **Auto-labeling**: PRs are automatically labeled for easy identification
+- **Security updates**: Automatic security updates for vulnerable dependencies
+
+Dependabot will create pull requests for:
+
+- Production dependencies (`dependencies`)
+- Development dependencies (`devDependencies`)
+- GitHub Actions versions
+- Security vulnerabilities (immediate updates)
 
 ## Contributing
 
