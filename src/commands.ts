@@ -56,7 +56,7 @@ export class RuntimeConfig {
 
   public updateBotPrompt(botName: string, field: 'personality' | 'intro' | 'periodic' | 'systemAddition', value: string): boolean {
     const botPrompts = this.prompts.get(botName);
-    if (!botPrompts) {return false;}
+    if (!botPrompts) { return false; }
 
     botPrompts[field] = value;
     return true;
@@ -185,34 +185,34 @@ export async function handleTuneCommand(interaction: ChatInputCommandInteraction
 
   try {
     switch (setting) {
-    case 'reply_chance':
-      if (value < 0 || value > 1) {
-        await interaction.reply({ content: '❌ Reply chance must be between 0.0 and 1.0', ephemeral: true });
-        return;
-      }
-      config.RANDOM_REPLY_CHANCE = value;
-      break;
-    case 'typing_speed':
-      if (value < 1 || value > 100) {
-        await interaction.reply({ content: '❌ Typing speed must be between 1 and 100 chars/sec', ephemeral: true });
-        return;
-      }
-      config.TYPING_SPEED_CHARS_PER_SEC = value;
-      break;
-    case 'cooldown':
-      if (value < 0 || value > 3600) {
-        await interaction.reply({ content: '❌ Cooldown must be between 0 and 3600 seconds', ephemeral: true });
-        return;
-      }
-      config.REPLY_COOLDOWN_MS = value * 1000;
-      break;
-    case 'interval':
-      if (value < 0.1 || value > 60) {
-        await interaction.reply({ content: '❌ Interval must be between 0.1 and 60 minutes', ephemeral: true });
-        return;
-      }
-      config.INTERVAL_MINUTES = value;
-      break;
+      case 'reply_chance':
+        if (value < 0 || value > 1) {
+          await interaction.reply({ content: '❌ Reply chance must be between 0.0 and 1.0', ephemeral: true });
+          return;
+        }
+        config.RANDOM_REPLY_CHANCE = value;
+        break;
+      case 'typing_speed':
+        if (value < 1 || value > 100) {
+          await interaction.reply({ content: '❌ Typing speed must be between 1 and 100 chars/sec', ephemeral: true });
+          return;
+        }
+        config.TYPING_SPEED_CHARS_PER_SEC = value;
+        break;
+      case 'cooldown':
+        if (value < 0 || value > 3600) {
+          await interaction.reply({ content: '❌ Cooldown must be between 0 and 3600 seconds', ephemeral: true });
+          return;
+        }
+        config.REPLY_COOLDOWN_MS = value * 1000;
+        break;
+      case 'interval':
+        if (value < 0.1 || value > 60) {
+          await interaction.reply({ content: '❌ Interval must be between 0.1 and 60 minutes', ephemeral: true });
+          return;
+        }
+        config.INTERVAL_MINUTES = value;
+        break;
     }
 
     const embed = new EmbedBuilder()

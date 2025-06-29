@@ -25,7 +25,7 @@ A TypeScript Discord bot that supports multiple AI personalities and can use dif
 ```bash
 git clone <your-repo-url>
 cd mybot
-```
+```markdown
 
 2. Install dependencies:
 
@@ -33,20 +33,20 @@ cd mybot
 npm install
 ```
 
-3. Create a `.env` file with your configuration:
+1. Create a `.env` file with your configuration:
 
 ```bash
 cp .env.example .env
 # Edit .env with your tokens and settings
 ```
 
-4. Build the project:
+1. Build the project:
 
 ```bash
 npm run build
 ```
 
-5. Start the bot:
+1. Start the bot:
 
 ```bash
 npm start
@@ -88,19 +88,19 @@ INFERENCE_URL=https://your-inference-app.herokuapp.com
    - Load your preferred model
    - Start the local server
 
-2. Verify LM Studio is running:
+1. Verify LM Studio is running:
 
 ```bash
 curl http://localhost:1234/v1/models
 ```
 
-3. Set your `.env`:
+1. Set your `.env`:
 
 ```env
 AI_PROVIDER=lmstudio
 ```
 
-4. Run in development mode:
+1. Run in development mode:
 
 ```bash
 npm run dev
@@ -125,7 +125,7 @@ npm run dev
 
 ## Heroku Deployment
 
-### Prerequisites
+### Heroku Prerequisites
 
 1. Install Heroku CLI:
    - Download from <https://devcenter.heroku.com/articles/heroku-cli>
@@ -145,7 +145,7 @@ heroku create your-bot-name
 echo "worker: npm start" > Procfile
 ```
 
-2. **Set environment variables on Heroku**:
+1. **Set environment variables on Heroku**:
 
 ```bash
 # Discord tokens
@@ -169,7 +169,7 @@ heroku config:set INFERENCE_MODEL_ID=your_model_id
 heroku config:set INFERENCE_URL=https://your-inference-app.herokuapp.com
 ```
 
-3. **Deploy to Heroku**:
+1. **Deploy to Heroku**:
 
 ```bash
 git add .
@@ -177,13 +177,13 @@ git commit -m "Deploy to Heroku"
 git push heroku main
 ```
 
-4. **Scale the worker dyno**:
+1. **Scale the worker dyno**:
 
 ```bash
 heroku ps:scale worker=1
 ```
 
-5. **Check logs**:
+1. **Check logs**:
 
 ```bash
 heroku logs --tail
@@ -216,19 +216,19 @@ heroku config:set INFERENCE_URL=https://your-inference-endpoint.herokuapp.com
 heroku ps
 ```
 
-2. **View logs**:
+1. **View logs**:
 
 ```bash
 heroku logs --tail --app your-app-name
 ```
 
-3. **Restart the app**:
+1. **Restart the app**:
 
 ```bash
 heroku restart
 ```
 
-4. **Check environment variables**:
+1. **Check environment variables**:
 
 ```bash
 heroku config
@@ -250,7 +250,7 @@ npm run test:coverage # Run Jest tests with coverage report
 
 ## Project Structure
 
-```
+```markdown
 mybot/
 ├── src/
 │   └── index.ts           # Main bot logic
@@ -287,7 +287,7 @@ NEW_BOT_TOKEN=your_new_bot_token_here
 heroku config:set NEW_BOT_TOKEN=your_new_bot_token_here
 ```
 
-3. **Update the bot configuration** in `src/index.ts`:
+1. **Update the bot configuration** in `src/index.ts`:
 
 ```typescript
 const BOT_CONFIGS: BotConfig[] = [

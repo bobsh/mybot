@@ -181,27 +181,27 @@ function startBot(config: BotConfig) {
 
   // Handle slash commands
   client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) {return;}
+    if (!interaction.isChatInputCommand()) { return; }
 
     try {
       switch (interaction.commandName) {
-      case 'tune':
-        await handleTuneCommand(interaction);
-        break;
-      case 'prompt':
-        await handlePromptCommand(interaction);
-        break;
-      case 'botstatus':
-        await handleStatusCommand(interaction);
-        break;
-      case 'preset':
-        await handlePresetCommand(interaction);
-        break;
-      case 'botcontrol':
-        await handleBotControlCommand(interaction);
-        break;
-      default:
-        await interaction.reply({ content: 'Unknown command!', ephemeral: true });
+        case 'tune':
+          await handleTuneCommand(interaction);
+          break;
+        case 'prompt':
+          await handlePromptCommand(interaction);
+          break;
+        case 'botstatus':
+          await handleStatusCommand(interaction);
+          break;
+        case 'preset':
+          await handlePresetCommand(interaction);
+          break;
+        case 'botcontrol':
+          await handleBotControlCommand(interaction);
+          break;
+        default:
+          await interaction.reply({ content: 'Unknown command!', ephemeral: true });
       }
     } catch (error) {
       console.error('Error handling slash command:', error);
@@ -382,24 +382,24 @@ async function handleBotControlCommand(interaction: ChatInputCommandInteraction)
   const config = RuntimeConfig.getInstance();
 
   switch (action) {
-  case 'silence':
-    config.RANDOM_REPLY_CHANCE = 0;
-    config.REPLY_COOLDOWN_MS = 86400000; // 24 hours
-    await interaction.reply({ content: '🔇 All bots silenced (emergency mode)', ephemeral: true });
-    break;
-  case 'resume':
-    config.RANDOM_REPLY_CHANCE = 0.25;
-    config.REPLY_COOLDOWN_MS = 60000;
-    await interaction.reply({ content: '🔊 Bots resumed normal operation', ephemeral: true });
-    break;
-  case 'reset':
-    // Reset to defaults
-    config.RANDOM_REPLY_CHANCE = 0.25;
-    config.REPLY_COOLDOWN_MS = 60000;
-    config.TYPING_SPEED_CHARS_PER_SEC = 10;
-    config.INTERVAL_MINUTES = 1;
-    await interaction.reply({ content: '🔄 All settings reset to defaults', ephemeral: true });
-    break;
+    case 'silence':
+      config.RANDOM_REPLY_CHANCE = 0;
+      config.REPLY_COOLDOWN_MS = 86400000; // 24 hours
+      await interaction.reply({ content: '🔇 All bots silenced (emergency mode)', ephemeral: true });
+      break;
+    case 'resume':
+      config.RANDOM_REPLY_CHANCE = 0.25;
+      config.REPLY_COOLDOWN_MS = 60000;
+      await interaction.reply({ content: '🔊 Bots resumed normal operation', ephemeral: true });
+      break;
+    case 'reset':
+      // Reset to defaults
+      config.RANDOM_REPLY_CHANCE = 0.25;
+      config.REPLY_COOLDOWN_MS = 60000;
+      config.TYPING_SPEED_CHARS_PER_SEC = 10;
+      config.INTERVAL_MINUTES = 1;
+      await interaction.reply({ content: '🔄 All settings reset to defaults', ephemeral: true });
+      break;
   }
 }
 
