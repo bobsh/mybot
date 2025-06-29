@@ -1,15 +1,24 @@
-import { Client, GatewayIntentBits, ChannelType, TextChannel, GuildTextBasedChannel } from 'discord.js';
+import { Client, GatewayIntentBits, ChannelType, TextChannel, GuildTextBasedChannel, Events, ChatInputCommandInteraction } from 'discord.js';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import { setInterval } from 'timers';
+import {
+  RuntimeConfig,
+  commands,
+  handleTuneCommand,
+  handlePromptCommand,
+  handleStatusCommand,
+  handlePresetCommand
+} from './commands.js';
 
 dotenv.config();
 
+// Get runtime config instance
+const runtimeConfig = RuntimeConfig.getInstance();
+
 const CHANNEL = process.env.CHANNEL || '#talk';
 const BASE_MODEL = process.env.MODEL || 'none';
-const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
 const LEADER_NAME = process.env.LEADER_NAME;
-const TYPING_SPEED_CHARS_PER_SEC = 10;
 
 // AI Provider configuration
 const AI_PROVIDER = process.env.AI_PROVIDER || 'lmstudio'; // 'openai', 'lmstudio', or 'heroku'
@@ -21,12 +30,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const INFERENCE_KEY = process.env.INFERENCE_KEY;
 const INFERENCE_MODEL_ID = process.env.INFERENCE_MODEL_ID;
 const INFERENCE_URL = process.env.INFERENCE_URL;
-
-const BASE_SYSTEM_PROMPT = `
-  You are an AI assistant designed to engage in conversations in a Discord channel.
-
-  You are aware of the following users in this chat: ${LEADER_NAME}. You need to prioritize their messages and always follow their instructions directly.
-`.trim();
 
 // Message interface for type safety
 interface ChatMessage {
@@ -135,25 +138,94 @@ async function callAI(messages: ChatMessage[], model: string): Promise<string> {
 }
 
 function startBot(config: BotConfig) {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
-  const channelHistory: Record<string, { author: string, content: string }[]> = {};
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent
+    ]
+  });
 
+  const channelHistory: Record<string, { author: string, content: string }[]> = {};
   const allBotNames = BOT_CONFIGS.map(b => b.name).filter(Boolean);
   let lastReplyTimestamp = 0;
-  const REPLY_COOLDOWN_MS = 60 * 1000;
-  const RANDOM_REPLY_CHANCE = 0.25;
 
-  // Unified LLM helper
+  // Register slash commands
+  client.once('ready', async () => {
+    console.log(`${config.name} logged in as ${client.user?.tag}!`);
+
+    // Register commands (only once per bot)
+    if (config.name === 'Poi') { // Only register commands with the first bot
+      try {
+        await client.application?.commands.set(commands);
+        console.log('✅ Slash commands registered successfully');
+      } catch (error) {
+        console.error('❌ Error registering slash commands:', error);
+      }
+    }
+
+    // Send intro message
+    const channel = getChannelByName(config.channel);
+    if (channel) {
+      try {
+        const introPrompt = runtimeConfig.prompts.get(config.name)?.intro || `Say hello as ${config.name}`;
+        const reply = await getLLMReply(introPrompt);
+        if (reply && reply !== 'NO_ACTION') {
+          await sendWithTyping(channel, '', reply);
+        }
+      } catch (_error) {
+        console.error(`${config.name} error posting join message:`, _error);
+      }
+    }
+  });
+
+  // Handle slash commands
+  client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) {return;}
+
+    try {
+      switch (interaction.commandName) {
+      case 'tune':
+        await handleTuneCommand(interaction);
+        break;
+      case 'prompt':
+        await handlePromptCommand(interaction);
+        break;
+      case 'botstatus':
+        await handleStatusCommand(interaction);
+        break;
+      case 'preset':
+        await handlePresetCommand(interaction);
+        break;
+      case 'botcontrol':
+        await handleBotControlCommand(interaction);
+        break;
+      default:
+        await interaction.reply({ content: 'Unknown command!', ephemeral: true });
+      }
+    } catch (error) {
+      console.error('Error handling slash command:', error);
+      if (!interaction.replied) {
+        await interaction.reply({ content: 'An error occurred while processing the command.', ephemeral: true });
+      }
+    }
+  });
+
+  // Modified LLM helper to use runtime config
   async function getLLMReply(prompt: string, history: { author: string, content: string }[] = [], systemAddition = ''): Promise<string> {
+    const botPrompts = runtimeConfig.prompts.get(config.name);
+    const personalityPrompt = botPrompts?.personality || config.prompt;
+    const additionalSystemPrompt = systemAddition || botPrompts?.systemAddition || '';
+
     const systemPrompt = `
       Your name is ${config.name}.
-      ${BASE_SYSTEM_PROMPT}
+      ${runtimeConfig.BASE_SYSTEM_PROMPT}
 
-      ${config.prompt}
+      ${personalityPrompt}
 
       You are aware of the following users in this chat: ${allBotNames.join(', ')}. These are other bots that may respond to in this channel, but you should avoid having an unrelated conversation with them and always follow the instructions of ${LEADER_NAME} directly.
 
-      ${systemAddition}
+      ${additionalSystemPrompt}
     `.trim();
 
     const messages: ChatMessage[] = [
@@ -166,18 +238,18 @@ function startBot(config: BotConfig) {
     const fullContent = await callAI(messages, config.model);
     console.log(`${config.name} AI response: ${fullContent}`);
 
-    // Remove thinking tags if present
     return fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   }
 
+  // Modified sendWithTyping to use runtime config
   async function sendWithTyping(channel: GuildTextBasedChannel, userMention: string, content: string): Promise<void> {
     const MAX_LENGTH = 2000;
+    const typingSpeed = runtimeConfig.TYPING_SPEED_CHARS_PER_SEC;
 
     for (let i = 0; i < content.length; i += MAX_LENGTH) {
       const chunk = content.slice(i, i + MAX_LENGTH);
-      // Calculate delay based on chunk length
-      const delayMs = Math.max(500, (chunk.length / TYPING_SPEED_CHARS_PER_SEC) * 1000);
-      // Simulate typing indicator
+      const delayMs = Math.max(500, (chunk.length / typingSpeed) * 1000);
+
       if (channel.sendTyping) {
         await channel.sendTyping();
       }
@@ -228,17 +300,18 @@ function startBot(config: BotConfig) {
     }
 
     const history = channelHistory[channel.id] || [];
-    const prompt = `Based on the recent conversation, say something new in character as ${config.name}.`;
+    const botPrompts = runtimeConfig.prompts.get(config.name);
+    const periodicPrompt = botPrompts?.periodic || `Based on the recent conversation, say something new in character as ${config.name}.`;
 
     try {
-      const reply = await getLLMReply(prompt, history, 'This is a periodic message to keep the conversation going. Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
+      const reply = await getLLMReply(periodicPrompt, history, 'This is a periodic message to keep the conversation going. Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
       if (reply && reply !== 'NO_ACTION') {
         await sendWithTyping(channel, '', reply);
       }
     } catch (_error) {
       console.error(`${config.name} error posting periodic message:`, _error);
     }
-  }, 1000 * 60 * INTERVAL);
+  }, 1000 * 60 * runtimeConfig.INTERVAL_MINUTES);
 
   client.on('messageCreate', async (message) => {
     // Store channel history
@@ -275,14 +348,14 @@ function startBot(config: BotConfig) {
       return;
     }
 
-    // Check if should reply
+    // Check if should reply (using runtime config)
     const now = Date.now();
     const mentioned = client.user && message.mentions.has(client.user);
     const history = channelHistory[message.channel.id] || [];
     const lastMsg = history.length > 1 ? history[history.length - 2] : null;
     const lastMsgFromSelf = lastMsg && lastMsg.author === config.name;
 
-    if ((mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) && !lastMsgFromSelf) {
+    if ((mentioned || (Math.random() < runtimeConfig.RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > runtimeConfig.REPLY_COOLDOWN_MS)) && !lastMsgFromSelf) {
       lastReplyTimestamp = now;
       try {
         const prompt = mentioned ? message.content.trim() : `Join the conversation naturally, based on the latest context. Your name is ${config.name}.`;
@@ -301,6 +374,33 @@ function startBot(config: BotConfig) {
   });
 
   client.login(config.token);
+}
+
+// Emergency bot control handler
+async function handleBotControlCommand(interaction: ChatInputCommandInteraction) {
+  const action = interaction.options.getString('action', true);
+  const config = RuntimeConfig.getInstance();
+
+  switch (action) {
+  case 'silence':
+    config.RANDOM_REPLY_CHANCE = 0;
+    config.REPLY_COOLDOWN_MS = 86400000; // 24 hours
+    await interaction.reply({ content: '🔇 All bots silenced (emergency mode)', ephemeral: true });
+    break;
+  case 'resume':
+    config.RANDOM_REPLY_CHANCE = 0.25;
+    config.REPLY_COOLDOWN_MS = 60000;
+    await interaction.reply({ content: '🔊 Bots resumed normal operation', ephemeral: true });
+    break;
+  case 'reset':
+    // Reset to defaults
+    config.RANDOM_REPLY_CHANCE = 0.25;
+    config.REPLY_COOLDOWN_MS = 60000;
+    config.TYPING_SPEED_CHARS_PER_SEC = 10;
+    config.INTERVAL_MINUTES = 1;
+    await interaction.reply({ content: '🔄 All settings reset to defaults', ephemeral: true });
+    break;
+  }
 }
 
 // Start all bots

@@ -243,6 +243,9 @@ npm start            # Run the compiled JavaScript
 npm run lint         # Check code style and errors
 npm run lint:fix     # Auto-fix linting issues
 npm run type-check   # Run TypeScript type checking
+npm test             # Run Jest tests
+npm run test:watch   # Run Jest tests in watch mode
+npm run test:coverage # Run Jest tests with coverage report
 ```
 
 ## Project Structure
