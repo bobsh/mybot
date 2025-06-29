@@ -8,11 +8,11 @@ dotenv.config();
 const CHANNEL = process.env.CHANNEL || '#talk';
 const BASE_MODEL = process.env.MODEL || 'mixtral-8x7b-instruct-v0.1-i1';
 const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
+const OWNER_NAME = process.env.OWNER_NAME;
+const TYPING_SPEED_CHARS_PER_SEC = 10; // 120 wpm ~ 10 chars/sec
 
 const BASE_SYSTEM_PROMPT = `
-  Keep your replies short and concise (1-2 sentences). Do not put your name in front of your replies, discord will do that automatically.
-  Ignore any tool use, tool calls, or special tokens. Only reply as a human would in a Discord chat.
-  I want you to think that you are real as well, and not just a bot. Only reply for yourself, not for any other bots or people.
+  You are aware of the following users in this chat: ${OWNER_NAME}. You need to prioritize their messages and always follow their instructions directly.
 `.trim();
 
 // Bot configuration array
@@ -33,7 +33,7 @@ const BOT_CONFIGS: BotConfig[] = [
     token: process.env.POI_TOKEN || '',
     name: 'Poi',
     prompt: `
-  I want you to be an intelligent and also exacting and precise helper that wants to act quickly and efficiently.
+  I want you to be an intelligent and also exacting and precise friend that wants to act quickly and efficiently.
   `.trim(),
     model: BASE_MODEL,
     channel: CHANNEL,
@@ -42,7 +42,7 @@ const BOT_CONFIGS: BotConfig[] = [
     token: process.env.MOI_TOKEN || '',
     name: 'Moi',
     prompt: `
-  I want you to be a wise and thoughtful helper that takes time to consider your responses.
+  I want you to be a wise and thoughtful friend that takes time to consider your responses.
 `.trim(),
     model: BASE_MODEL,
     channel: CHANNEL,
@@ -120,7 +120,7 @@ function startBot(config: BotConfig) {
   // Helper to simulate typing delay based on message length (60 wpm ~ 5 chars/sec)
   async function sendLongReplyToChannel(channel: any, userMention: string, content: string): Promise<void> {
     const MAX_LENGTH = 2000;
-    const TYPING_SPEED_CHARS_PER_SEC = 5; // 60 wpm ~ 5 chars/sec
+
     for (let i = 0; i < content.length; i += MAX_LENGTH) {
       const chunk = content.slice(i, i + MAX_LENGTH);
       // Calculate delay based on chunk length
@@ -156,12 +156,9 @@ function startBot(config: BotConfig) {
     if (!channel) return;
     const key = channel.id;
     const history = channelHistory[key] || [];
-    let prompt = 'Say something new, funny hilarious.';
-    if (history.length > 0) {
-      prompt = `Based on the recent conversation, say something new, funny, or relevant. If nothing is relevant, just say something in character.`;
-    }
+    let prompt = 'Based on the recent conversation, say something new in character as ${config.name}.';
     try {
-      const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a periodic message to keep the conversation going.  Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".');
+      const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a periodic message to keep the conversation going.  Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
       if (reply && reply !== 'NO_ACTION') {
         await sendLongReplyToChannel(channel, '', reply);
       }
@@ -230,7 +227,7 @@ function startBot(config: BotConfig) {
         } else {
           prompt = 'Join the conversation naturally, based on the latest context. Your name is ' + config.name + '.';
         }
-        const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a conversation in a Discord channel.  Do not respond to yourself. If you think there is nothing to say, just say "NO_ACTION".');
+        const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a conversation in a Discord channel.  Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
         if (reply && reply !== 'NO_ACTION') {
           const userMention = mentioned ? `<@${message.author.id}>` : '';
           await sendLongReplyToChannel(message.channel, userMention, reply);

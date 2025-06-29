@@ -1,5 +1,11 @@
 # My bot
 
+A simple bot that uses the LM Studio API to chat with a model via discord.
+
+## Installation
+
+(needs improvements)
+
 Start LM Studio service:
 
 <https://lmstudio.ai/docs/app/api/headless>
@@ -25,4 +31,10 @@ Start LM Studio service:
  Server started.
 2025-06-28 05:33:51  [INFO]
  Just-in-time model loading active.
+```
+
+The run command:
+
+```bash
+ npx ts-node .\src\index.ts
 ```
