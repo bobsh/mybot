@@ -101,7 +101,11 @@ async function callAI(messages: any[], model: string): Promise<string> {
       'Authorization': `Bearer ${INFERENCE_KEY}`
     };
 
-    response = await axios.post(INFERENCE_URL || '', requestData, {
+    // Add v1/chat/completions to the inference URL
+    const baseUrl = INFERENCE_URL?.endsWith('/') ? INFERENCE_URL.slice(0, -1) : INFERENCE_URL;
+    const fullUrl = `${baseUrl}/v1/chat/completions`;
+
+    response = await axios.post(fullUrl, requestData, {
       headers
     });
 
