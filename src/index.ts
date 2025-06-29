@@ -6,10 +6,21 @@ import { setInterval } from 'timers';
 dotenv.config();
 
 const CHANNEL = process.env.CHANNEL || '#talk';
-const BASE_MODEL = process.env.MODEL || 'mixtral-8x7b-instruct-v0.1-i1';
+const BASE_MODEL = process.env.MODEL || 'none';
 const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
 const OWNER_NAME = process.env.OWNER_NAME;
-const TYPING_SPEED_CHARS_PER_SEC = 10; // 120 wpm ~ 10 chars/sec
+const TYPING_SPEED_CHARS_PER_SEC = 10;
+
+// AI Provider configuration
+const AI_PROVIDER = process.env.AI_PROVIDER || 'lmstudio'; // 'openai', 'lmstudio', or 'heroku'
+
+// OpenAI API settings
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// Heroku Inference configuration
+const INFERENCE_KEY = process.env.INFERENCE_KEY;
+const INFERENCE_MODEL_ID = process.env.INFERENCE_MODEL_ID;
+const INFERENCE_URL = process.env.INFERENCE_URL;
 
 const BASE_SYSTEM_PROMPT = `
   You are aware of the following users in this chat: ${OWNER_NAME}. You need to prioritize their messages and always follow their instructions directly.
@@ -50,75 +61,110 @@ const BOT_CONFIGS: BotConfig[] = [
   // Add more bot configs here as needed
 ];
 
-// Helper to start a bot instance with its own config
+// Unified AI provider function
+async function callAI(messages: any[], model: string): Promise<string> {
+  let response;
+
+  if (AI_PROVIDER === 'openai') {
+    response = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: model === BASE_MODEL ? 'gpt-4o-mini' : model,
+      messages,
+      temperature: 0.7
+    }, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    return response.data?.choices?.[0]?.message?.content || 'No response generated.';
+
+  } else if (AI_PROVIDER === 'heroku') {
+    // Heroku Inference
+    const systemMsg = messages.find(msg => msg.role === 'system');
+    const userMessages = messages.filter(msg => msg.role === 'user');
+
+    // Combine messages into a single prompt for Heroku Inference
+    const prompt = systemMsg
+      ? `${systemMsg.content}\n\n${userMessages.map(msg => msg.content).join('\n')}`
+      : userMessages.map(msg => msg.content).join('\n');
+
+    const requestData = {
+      prompt: prompt,
+      max_tokens: 150,
+      temperature: 0.7,
+      model: model === BASE_MODEL ? INFERENCE_MODEL_ID : model
+    };
+
+    const headers: any = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${INFERENCE_KEY}`
+    };
+
+    response = await axios.post(INFERENCE_URL || '', requestData, {
+      headers
+    });
+
+    // Handle Heroku Inference response format
+    if (response.data?.text) {
+      return response.data.text.trim();
+    } else if (response.data?.choices?.[0]?.text) {
+      return response.data.choices[0].text.trim();
+    } else if (response.data?.generated_text) {
+      return response.data.generated_text.trim();
+    } else {
+      return 'No response generated.';
+    }
+
+  } else {
+    // LM Studio
+    response = await axios.post('http://localhost:1234/v1/chat/completions', {
+      model: model === BASE_MODEL ? 'mixtral-8x7b-instruct-v0.1-i1' : model,
+      messages,
+      temperature: 0.7
+    });
+
+    return response.data?.choices?.[0]?.message?.content || 'No response generated.';
+  }
+}
+
 function startBot(config: BotConfig) {
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
   const channelHistory: Record<string, { author: string, content: string }[]> = {};
 
-  client.once('ready', async () => {
-    console.log(`Logged in as ${client.user?.tag}!`);
-    // On ready, immediately post a message in the configured channel
-    const channel = getChannelByName(config.channel);
-    if (channel) {
-      const prompt = `Say hello to the channel and introduce yourself as ${config.name}.`;
-      try {
-        const { reply } = await getLLMReply(prompt, '');
-        if (reply && reply !== 'NO_ACTION') {
-          await sendLongReplyToChannel(channel, '', reply);
-        }
-      } catch (error) {
-        console.error('Error posting join message:', error);
-      }
-    }
-  });
-
-  // Pass all bot names to the prompt for self/other awareness
   const allBotNames = BOT_CONFIGS.map(b => b.name).filter(Boolean);
+  let lastReplyTimestamp = 0;
+  const REPLY_COOLDOWN_MS = 60 * 1000;
+  const RANDOM_REPLY_CHANCE = 0.25;
 
-  // Helper to call LLM and extract response
-  async function getLLMReply(prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `Your name is ${config.name}.\n${BASE_SYSTEM_PROMPT}\n\n${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}.\n\n${system_prompt}`;
-    console.log(`Calling LLM with prompt: ${systemPrompt}`);
-    const response = await axios.post('http://localhost:1234/v1/chat/completions', {
-      model: config.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.7
-    });
-    let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
-    console.log(`LLM response: ${fullContent}`);
-    const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
-    const thinking = thinkMatch ? thinkMatch[0].replace(/<\/?think>/gi, '').trim() : '';
-    const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    return { reply, thinking };
-  }
+  // Unified LLM helper
+  async function getLLMReply(prompt: string, history: { author: string, content: string }[] = [], systemAddition = ''): Promise<string> {
+    const systemPrompt = `
+      Your name is ${config.name}.
+      ${BASE_SYSTEM_PROMPT}
 
-  // Helper to call LLM and extract response, now accepts full message history
-  async function getLLMReplyWithHistory(history: { author: string, content: string }[], prompt: string, system_prompt: string): Promise<{ reply: string, thinking: string }> {
-    const systemPrompt = `Your name is ${config.name}.\n${BASE_SYSTEM_PROMPT}\n\n${config.prompt}\n\nYou are aware of the following users in this chat: ${allBotNames.join(', ')}.\n\n${system_prompt}`;
-    console.log(`Calling LLM with history: ${JSON.stringify(history)} and prompt: ${prompt}`);
+      ${config.prompt}
+
+      You are aware of the following users in this chat: ${allBotNames.join(', ')}.
+
+      ${systemAddition}
+    `.trim();
+
     const messages = [
       { role: 'system', content: systemPrompt },
       ...history.map(msg => ({ role: 'user', content: `${msg.author}: ${msg.content}` })),
       { role: 'user', content: prompt }
     ];
-    const response = await axios.post('http://localhost:1234/v1/chat/completions', {
-      model: config.model,
-      messages,
-      temperature: 0.7
-    });
-    let fullContent = response.data?.choices?.[0]?.message?.content || 'No response generated.';
-    console.log(`LLM response with history: ${fullContent}`);
-    const thinkMatch = fullContent.match(/<think>[\s\S]*?<\/think>/i);
-    const thinking = thinkMatch ? thinkMatch[0].replace(/<\/?think>/gi, '').trim() : '';
-    const reply = fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    return { reply, thinking };
+
+    console.log(`${config.name} calling AI with prompt: ${prompt}`);
+    const fullContent = await callAI(messages, config.model);
+    console.log(`${config.name} AI response: ${fullContent}`);
+
+    // Remove thinking tags if present
+    return fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   }
 
-  // Helper to simulate typing delay based on message length (60 wpm ~ 5 chars/sec)
-  async function sendLongReplyToChannel(channel: any, userMention: string, content: string): Promise<void> {
+  async function sendWithTyping(channel: any, userMention: string, content: string): Promise<void> {
     const MAX_LENGTH = 2000;
 
     for (let i = 0; i < content.length; i += MAX_LENGTH) {
@@ -151,90 +197,88 @@ function startBot(config: BotConfig) {
     return null;
   }
 
+  client.once('ready', async () => {
+    console.log(`${config.name} logged in as ${client.user?.tag}!`);
+    const channel = getChannelByName(config.channel);
+    if (channel) {
+      try {
+        const reply = await getLLMReply(`Say hello to the channel and introduce yourself as ${config.name}.`);
+        if (reply && reply !== 'NO_ACTION') {
+          await sendWithTyping(channel, '', reply);
+        }
+      } catch (error) {
+        console.error(`${config.name} error posting join message:`, error);
+      }
+    }
+  });
+
+  // Periodic posting
   setInterval(async () => {
     const channel = getChannelByName(config.channel);
     if (!channel) return;
-    const key = channel.id;
-    const history = channelHistory[key] || [];
-    let prompt = 'Based on the recent conversation, say something new in character as ${config.name}.';
+
+    const history = channelHistory[channel.id] || [];
+    const prompt = `Based on the recent conversation, say something new in character as ${config.name}.`;
+
     try {
-      const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a periodic message to keep the conversation going.  Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
+      const reply = await getLLMReply(prompt, history, 'This is a periodic message to keep the conversation going. Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
       if (reply && reply !== 'NO_ACTION') {
-        await sendLongReplyToChannel(channel, '', reply);
+        await sendWithTyping(channel, '', reply);
       }
     } catch (error) {
-      console.error('Error posting periodic message:', error);
+      console.error(`${config.name} error posting periodic message:`, error);
     }
   }, 1000 * 60 * INTERVAL);
 
-  // Track last reply time for cooldown
-  let lastReplyTimestamp = 0;
-  const REPLY_COOLDOWN_MS = 60 * 1000; // 1 minute cooldown
-  const RANDOM_REPLY_CHANCE = 0.25; // 25% chance to reply to non-mention
-
   client.on('messageCreate', async (message) => {
-    // Store channel history for context
+    // Store channel history
     if (message.guild && message.channel) {
       const key = message.channel.id;
-
-      // Initialize history for this channel if it doesn't exist
       if (!channelHistory[key]) channelHistory[key] = [];
-
-      // Add message to history
       channelHistory[key].push({ author: message.author.username, content: message.content });
-
-      // Limit history size to the last 100 messages
       if (channelHistory[key].length > 100) channelHistory[key].shift();
     }
 
-    // Ignore messages from the bot itself to prevent loops
+    // Ignore own messages
     if (client.user && message.author.id === client.user.id) return;
 
-    // Handle ping command
+    // Handle ping
     if (message.content === '!ping') {
       message.reply('Pong!');
       return;
     }
 
-    // Handle direct messages
+    // Handle DMs
     if (message.channel.type === ChannelType.DM) {
       try {
-        const { reply } = await getLLMReply(message.content, 'This is a direct message conversation.');
+        const reply = await getLLMReply(message.content, [], 'This is a direct message conversation.');
         message.reply(reply);
       } catch (error) {
-        message.reply('Sorry, I could not get a response from the LLM service.');
+        message.reply('Sorry, I could not get a response from the AI service.');
       }
       return;
     }
 
-    // Only reply if mentioned, or with a random chance, and respect cooldown
+    // Check if should reply
     const now = Date.now();
     const mentioned = client.user && message.mentions.has(client.user);
-    // Prevent replying to own last message
-    const key = message.guild && message.channel ? message.channel.id : '';
-    const history = key ? channelHistory[key] || [] : [];
+    const history = channelHistory[message.channel.id] || [];
     const lastMsg = history.length > 1 ? history[history.length - 2] : null;
     const lastMsgFromSelf = lastMsg && lastMsg.author === config.name;
 
-    // Check if we should reply
     if ((mentioned || (Math.random() < RANDOM_REPLY_CHANCE && now - lastReplyTimestamp > REPLY_COOLDOWN_MS)) && !lastMsgFromSelf) {
       lastReplyTimestamp = now;
       try {
-        let prompt;
-        if (mentioned && client.user) {
-          // If mentioned, use the message content as the prompt
-          prompt = message.content.trim();
-        } else {
-          prompt = 'Join the conversation naturally, based on the latest context. Your name is ' + config.name + '.';
-        }
-        const { reply } = await getLLMReplyWithHistory(history, prompt, 'This is a conversation in a Discord channel.  Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
+        const prompt = mentioned ? message.content.trim() : `Join the conversation naturally, based on the latest context. Your name is ${config.name}.`;
+        const reply = await getLLMReply(prompt, history, 'This is a conversation in a Discord channel. Do not respond to yourself. If you think there is nothing to say at all, just say "NO_ACTION".');
+
         if (reply && reply !== 'NO_ACTION') {
           const userMention = mentioned ? `<@${message.author.id}>` : '';
-          await sendLongReplyToChannel(message.channel, userMention, reply);
+          await sendWithTyping(message.channel, userMention, reply);
         }
       } catch (error) {
         if (mentioned) {
-          await sendLongReplyToChannel(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the LLM service.');
+          await sendWithTyping(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the AI service.');
         }
       }
     }
