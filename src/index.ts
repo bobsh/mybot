@@ -1,8 +1,7 @@
-import { Client, GatewayIntentBits, ChannelType, TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, ChannelType, TextChannel, GuildTextBasedChannel } from 'discord.js';
 import * as dotenv from 'dotenv';
 import axios from 'axios';
 import { setInterval } from 'timers';
-import * as http from 'http';
 
 dotenv.config();
 
@@ -27,6 +26,12 @@ const BASE_SYSTEM_PROMPT = `
   You are aware of the following users in this chat: ${OWNER_NAME}. You need to prioritize their messages and always follow their instructions directly.
 `.trim();
 
+// Message interface for type safety
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 // Bot configuration array
 interface BotConfig {
   token: string;
@@ -48,7 +53,7 @@ const BOT_CONFIGS: BotConfig[] = [
   I want you to be an intelligent and also exacting and precise friend that wants to act quickly and efficiently.
   `.trim(),
     model: BASE_MODEL,
-    channel: CHANNEL,
+    channel: CHANNEL
   },
   {
     token: process.env.MOI_TOKEN || '',
@@ -57,13 +62,13 @@ const BOT_CONFIGS: BotConfig[] = [
   I want you to be a wise and thoughtful friend that takes time to consider your responses.
 `.trim(),
     model: BASE_MODEL,
-    channel: CHANNEL,
-  },
+    channel: CHANNEL
+  }
   // Add more bot configs here as needed
 ];
 
 // Unified AI provider function
-async function callAI(messages: any[], model: string): Promise<string> {
+async function callAI(messages: ChatMessage[], model: string): Promise<string> {
   let response;
 
   if (AI_PROVIDER === 'openai') {
@@ -89,7 +94,7 @@ async function callAI(messages: any[], model: string): Promise<string> {
       max_tokens: 150
     };
 
-    const headers: any = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${INFERENCE_KEY}`
     };
@@ -149,9 +154,9 @@ function startBot(config: BotConfig) {
       ${systemAddition}
     `.trim();
 
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...history.map(msg => ({ role: 'user', content: `${msg.author}: ${msg.content}` })),
+      ...history.map(msg => ({ role: 'user' as const, content: `${msg.author}: ${msg.content}` })),
       { role: 'user', content: prompt }
     ];
 
@@ -163,7 +168,7 @@ function startBot(config: BotConfig) {
     return fullContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   }
 
-  async function sendWithTyping(channel: any, userMention: string, content: string): Promise<void> {
+  async function sendWithTyping(channel: GuildTextBasedChannel, userMention: string, content: string): Promise<void> {
     const MAX_LENGTH = 2000;
 
     for (let i = 0; i < content.length; i += MAX_LENGTH) {
@@ -171,7 +176,9 @@ function startBot(config: BotConfig) {
       // Calculate delay based on chunk length
       const delayMs = Math.max(500, (chunk.length / TYPING_SPEED_CHARS_PER_SEC) * 1000);
       // Simulate typing indicator
-      if (channel.sendTyping) await channel.sendTyping();
+      if (channel.sendTyping) {
+        await channel.sendTyping();
+      }
       await new Promise(res => setTimeout(res, delayMs));
       await channel.send(`${userMention} ${chunk}`);
     }
@@ -205,8 +212,8 @@ function startBot(config: BotConfig) {
         if (reply && reply !== 'NO_ACTION') {
           await sendWithTyping(channel, '', reply);
         }
-      } catch (error) {
-        console.error(`${config.name} error posting join message:`, error);
+      } catch (_error) {
+        console.error(`${config.name} error posting join message:`, _error);
       }
     }
   });
@@ -214,7 +221,9 @@ function startBot(config: BotConfig) {
   // Periodic posting
   setInterval(async () => {
     const channel = getChannelByName(config.channel);
-    if (!channel) return;
+    if (!channel) {
+      return;
+    }
 
     const history = channelHistory[channel.id] || [];
     const prompt = `Based on the recent conversation, say something new in character as ${config.name}.`;
@@ -224,8 +233,8 @@ function startBot(config: BotConfig) {
       if (reply && reply !== 'NO_ACTION') {
         await sendWithTyping(channel, '', reply);
       }
-    } catch (error) {
-      console.error(`${config.name} error posting periodic message:`, error);
+    } catch (_error) {
+      console.error(`${config.name} error posting periodic message:`, _error);
     }
   }, 1000 * 60 * INTERVAL);
 
@@ -233,13 +242,19 @@ function startBot(config: BotConfig) {
     // Store channel history
     if (message.guild && message.channel) {
       const key = message.channel.id;
-      if (!channelHistory[key]) channelHistory[key] = [];
+      if (!channelHistory[key]) {
+        channelHistory[key] = [];
+      }
       channelHistory[key].push({ author: message.author.username, content: message.content });
-      if (channelHistory[key].length > 100) channelHistory[key].shift();
+      if (channelHistory[key].length > 100) {
+        channelHistory[key].shift();
+      }
     }
 
     // Ignore own messages
-    if (client.user && message.author.id === client.user.id) return;
+    if (client.user && message.author.id === client.user.id) {
+      return;
+    }
 
     // Handle ping
     if (message.content === '!ping') {
@@ -252,7 +267,7 @@ function startBot(config: BotConfig) {
       try {
         const reply = await getLLMReply(message.content, [], 'This is a direct message conversation.');
         message.reply(reply);
-      } catch (error) {
+      } catch {
         message.reply('Sorry, I could not get a response from the AI service.');
       }
       return;
@@ -275,7 +290,7 @@ function startBot(config: BotConfig) {
           const userMention = mentioned ? `<@${message.author.id}>` : '';
           await sendWithTyping(message.channel, userMention, reply);
         }
-      } catch (error) {
+      } catch {
         if (mentioned) {
           await sendWithTyping(message.channel, `<@${message.author.id}>`, 'Sorry, I could not get a response from the AI service.');
         }
