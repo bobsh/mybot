@@ -1,7 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
-export default [
+const config = [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -38,3 +38,5 @@ export default [
     ignores: ['dist/**', 'node_modules/**', '*.js', '*.d.ts', 'coverage/', '.env', '.env.local']
   }
 ];
+
+export default config;
