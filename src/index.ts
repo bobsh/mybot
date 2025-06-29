@@ -80,20 +80,12 @@ async function callAI(messages: any[], model: string): Promise<string> {
     return response.data?.choices?.[0]?.message?.content || 'No response generated.';
 
   } else if (AI_PROVIDER === 'heroku') {
-    // Heroku Inference
-    const systemMsg = messages.find(msg => msg.role === 'system');
-    const userMessages = messages.filter(msg => msg.role === 'user');
-
-    // Combine messages into a single prompt for Heroku Inference
-    const prompt = systemMsg
-      ? `${systemMsg.content}\n\n${userMessages.map(msg => msg.content).join('\n')}`
-      : userMessages.map(msg => msg.content).join('\n');
-
+    // Heroku Inference - use the same format as OpenAI
     const requestData = {
-      prompt: prompt,
-      max_tokens: 150,
+      model: model === BASE_MODEL ? INFERENCE_MODEL_ID : model,
+      messages,  // Use the messages array directly, not converted to prompt
       temperature: 0.7,
-      model: model === BASE_MODEL ? INFERENCE_MODEL_ID : model
+      max_tokens: 150
     };
 
     const headers: any = {
@@ -109,11 +101,13 @@ async function callAI(messages: any[], model: string): Promise<string> {
       headers
     });
 
-    // Handle Heroku Inference response format
-    if (response.data?.text) {
-      return response.data.text.trim();
+    // Handle Heroku Inference response format (should be same as OpenAI)
+    if (response.data?.choices?.[0]?.message?.content) {
+      return response.data.choices[0].message.content.trim();
     } else if (response.data?.choices?.[0]?.text) {
       return response.data.choices[0].text.trim();
+    } else if (response.data?.text) {
+      return response.data.text.trim();
     } else if (response.data?.generated_text) {
       return response.data.generated_text.trim();
     } else {
