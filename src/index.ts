@@ -286,19 +286,6 @@ function startBot(config: BotConfig) {
   client.login(config.token);
 }
 
-// Add HTTP server for Heroku web dyno
-if (process.env.PORT) {
-  const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Discord Bot is running!');
-  });
-
-  const port = process.env.PORT || 3000;
-  server.listen(port, () => {
-    console.log(`HTTP server listening on port ${port}`);
-  });
-}
-
 // Start all bots
 for (const config of BOT_CONFIGS) {
   if (config.token) {
