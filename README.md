@@ -65,7 +65,7 @@ MOI_TOKEN=your_moi_bot_token_here
 CHANNEL=#general
 MODEL=your_model_name
 INTERVAL=5
-OWNER_NAME=YourName
+LEADER_NAME=YourName
 
 # AI Provider (choose one: 'lmstudio', 'openai', or 'heroku')
 AI_PROVIDER=lmstudio
@@ -156,7 +156,7 @@ heroku config:set MOI_TOKEN=your_moi_bot_token_here
 heroku config:set CHANNEL=#general
 heroku config:set MODEL=your_model_name
 heroku config:set INTERVAL=5
-heroku config:set OWNER_NAME=YourName
+heroku config:set LEADER_NAME=YourName
 
 # For OpenAI
 heroku config:set AI_PROVIDER=openai

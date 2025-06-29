@@ -8,7 +8,7 @@ dotenv.config();
 const CHANNEL = process.env.CHANNEL || '#talk';
 const BASE_MODEL = process.env.MODEL || 'none';
 const INTERVAL = parseInt(process.env.INTERVAL || '1', 10);
-const OWNER_NAME = process.env.OWNER_NAME;
+const LEADER_NAME = process.env.LEADER_NAME;
 const TYPING_SPEED_CHARS_PER_SEC = 10;
 
 // AI Provider configuration
@@ -23,7 +23,9 @@ const INFERENCE_MODEL_ID = process.env.INFERENCE_MODEL_ID;
 const INFERENCE_URL = process.env.INFERENCE_URL;
 
 const BASE_SYSTEM_PROMPT = `
-  You are aware of the following users in this chat: ${OWNER_NAME}. You need to prioritize their messages and always follow their instructions directly.
+  You are an AI assistant designed to engage in conversations in a Discord channel.
+
+  You are aware of the following users in this chat: ${LEADER_NAME}. You need to prioritize their messages and always follow their instructions directly.
 `.trim();
 
 // Message interface for type safety
@@ -149,7 +151,7 @@ function startBot(config: BotConfig) {
 
       ${config.prompt}
 
-      You are aware of the following users in this chat: ${allBotNames.join(', ')}.
+      You are aware of the following users in this chat: ${allBotNames.join(', ')}. These are other bots that may respond to in this channel, but you should avoid having an unrelated conversation with them and always follow the instructions of ${LEADER_NAME} directly.
 
       ${systemAddition}
     `.trim();
