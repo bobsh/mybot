@@ -15,7 +15,7 @@ export default {
       }
     }]
   },
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
   collectCoverageFrom: [
@@ -25,10 +25,5 @@ export default {
     '!src/**/*.test.ts'
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  globals: {
-    'ts-jest': {
-      useESM: true
-    }
-  }
+  coverageReporters: ['text', 'lcov', 'html']
 };
