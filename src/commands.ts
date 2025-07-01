@@ -193,8 +193,8 @@ export async function handleTuneCommand(interaction: ChatInputCommandInteraction
         config.RANDOM_REPLY_CHANCE = value;
         break;
       case 'typing_speed':
-        if (value < 1 || value > 100) {
-          await interaction.reply({ content: '❌ Typing speed must be between 1 and 100 chars/sec', ephemeral: true });
+        if (value < 1 || value > 1000) {
+          await interaction.reply({ content: '❌ Typing speed must be between 1 and 1000 chars/sec', ephemeral: true });
           return;
         }
         config.TYPING_SPEED_CHARS_PER_SEC = value;
